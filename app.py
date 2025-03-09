@@ -74,6 +74,7 @@ def consume():
                 logger.info(f'Downloaded {img_name} from S3')
 
                 # --- Run YOLOv5 Object Detection ---
+                # --- Run YOLOv5 Object Detection ---
                 model = ultralytics.YOLO("yolov5s.pt")
                 results = model(local_img_path)
 
@@ -81,10 +82,10 @@ def consume():
                 if isinstance(results, list):
                 # Handle the case where results is a list (could be multiple results)
                   for result in results:
-                    result.save(save_dir=f"static/data/{prediction_id}")
+                    result.save()  # This will save the results in the default location
                 elif hasattr(results, 'save'):
                 # Handle the case where results is a Results object
-                  results.save(save_dir=f"static/data/{prediction_id}")
+                  results.save(save_dir=f"static/data/{prediction_id}")  # Save results to a specified directory
                 else:
                   logger.error(f"Unexpected result type: {type(results)}")
 
