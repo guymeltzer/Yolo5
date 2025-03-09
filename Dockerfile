@@ -23,6 +23,9 @@ RUN pip3 install -r requirements.txt
 # Download YOLO model
 RUN curl -L https://github.com/ultralytics/yolov5/releases/download/v6.1/yolov5s.pt -o yolov5s.pt
 
+# Download coco128.yaml if it's not available
+RUN curl -L https://raw.githubusercontent.com/ultralytics/yolov5/master/data/coco128.yaml -o data/coco128.yaml
+
 # Copy application files
 COPY . .
 
