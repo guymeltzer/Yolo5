@@ -10,6 +10,16 @@ from pathlib import Path
 from loguru import logger
 from pymongo import MongoClient
 
+# --- AWS Secrets Manager Setup ---
+secrets_client = boto3.client('secretsmanager', region_name="eu-north-1")
+response = secrets_client.get_secret_value(SecretId="polybot-secrets")
+secrets = json.loads(response['SecretString'])
+
+# --- Set Environment Variables from Secrets ---
+os.environ["S3_BUCKET_NAME"] = secrets["S3_BUCKET_NAME"]
+os.environ["SQS_QUEUE_URL"] = secrets["SQS_QUEUE_URL"]
+os.environ["MONGO_URI"] = secrets["MONGO_URI"]
+
 # --- Environment Variables ---
 images_bucket = os.environ['S3_BUCKET_NAME']
 queue_url = os.environ['SQS_QUEUE_URL']
