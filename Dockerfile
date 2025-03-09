@@ -27,4 +27,4 @@ RUN mkdir -p data && \
 COPY . .
 
 # Run command when container starts
-CMD ["python", "app.py"]
+CMD ["python3", "app.py"]
