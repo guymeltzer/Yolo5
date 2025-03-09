@@ -1,4 +1,5 @@
-pyyaml
+ultralytics
+pymongo
 loguru
 boto3
-ultralytics
+requests
