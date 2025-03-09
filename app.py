@@ -1,4 +1,5 @@
 import time
+import ultralytics
 import os
 import json
 import boto3
@@ -6,7 +7,6 @@ import requests
 import uuid
 import yaml
 from pathlib import Path
-from detect import run
 from loguru import logger
 from pymongo import MongoClient
 
@@ -69,14 +69,11 @@ def consume():
                 logger.info(f'Downloaded {img_name} from S3')
 
                 # --- Run YOLOv5 Object Detection ---
-                run(
-                    weights='yolov5s.pt',
-                    data='data/coco128.yaml',
-                    source=local_img_path,
-                    project='static/data',
-                    name=prediction_id,
-                    save_txt=True
-                )
+                model = ultralytics.YOLO("yolov5s.pt")
+                results = model(local_img_path)
+
+                # Save results to a directory for further processing
+                results.save(save_dir=f"static/data/{prediction_id}")
 
                 # --- Path for Predictions ---
                 predicted_img_path = Path(f'static/data/{prediction_id}/{img_name}')
