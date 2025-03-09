@@ -89,4 +89,5 @@ def consume():
                 logger.info(f'Uploaded predicted image to S3: {predicted_s3_key}')
 
                 # --- Parse YOLOv5 Results ---
-                pred_summary_path = Path(f'static/data/{prediction_id}/lab
+                pred_summary_path = Path(f'static/data/{prediction_id}/labels/{img_name.split(".")[0]}.txt')
+
