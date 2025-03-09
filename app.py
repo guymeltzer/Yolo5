@@ -77,6 +77,17 @@ def consume():
                 model = ultralytics.YOLO("yolov5s.pt")
                 results = model(local_img_path)
 
+                # Check if results is a list or a Results object
+                if isinstance(results, list):
+                # Handle the case where results is a list (could be multiple results)
+                  for result in results:
+                    result.save(save_dir=f"static/data/{prediction_id}")
+                elif hasattr(results, 'save'):
+                # Handle the case where results is a Results object
+                  results.save(save_dir=f"static/data/{prediction_id}")
+                else:
+                  logger.error(f"Unexpected result type: {type(results)}")
+
                 # Save results to a directory for further processing
                 results.save(save_dir=f"static/data/{prediction_id}")
 
