@@ -1,5 +1,5 @@
 # Use Ubuntu 24.04 as the base image
-FROM ubuntu:24.04
+FROM ultralytics/yolov5:v6.2-cpu
 
 # Set the working directory
 WORKDIR /app
