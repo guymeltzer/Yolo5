@@ -20,16 +20,21 @@ polybot_url = os.environ.get('POLYBOT_URL', 'http://polybot-service:30619/result
 
 # --- AWS Clients ---
 sqs_client = boto3.client('sqs', region_name='eu-north-1')
-s3_client = boto3.client('s3', aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'], aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'])
+s3_client = boto3.client('s3')
 
-# --- MongoDB Client ---
-try:
-    mongo_client = MongoClient(mongo_uri)
-    db = mongo_client[db_name]
-    collection = db[collection_name]
-except Exception as e:
-    logger.error(f"Failed to connect to MongoDB: {e}")
-    # Optionally, retry or exit with a specific status code
+# --- MongoDB Client with Retry Logic ---
+for _ in range(5):  # Retry up to 5 times
+    try:
+        mongo_client = MongoClient(mongo_uri)
+        db = mongo_client[db_name]
+        collection = db[collection_name]
+        logger.info("Connected to MongoDB successfully")
+        break  # Exit loop if successful
+    except Exception as e:
+        logger.error(f"MongoDB connection failed: {e}")
+        time.sleep(5)  # Wait before retrying
+else:
+    logger.error("MongoDB connection failed after retries, exiting...")
     exit(1)
 
 # --- Load Class Names ---
@@ -42,6 +47,8 @@ except Exception as e:
 
 def consume():
     """Polls SQS queue for messages and processes image jobs."""
+    model = ultralytics.YOLO("yolov5s.pt")  # Load YOLO model once
+
     while True:
         try:
             response = sqs_client.receive_message(
@@ -74,23 +81,7 @@ def consume():
                 logger.info(f'Downloaded {img_name} from S3')
 
                 # --- Run YOLOv5 Object Detection ---
-                # --- Run YOLOv5 Object Detection ---
-                model = ultralytics.YOLO("yolov5s.pt")
-                results = model(local_img_path)
-
-                # Check if results is a list or a Results object
-                if isinstance(results, list):
-                # Handle the case where results is a list (could be multiple results)
-                  for result in results:
-                    result.save()  # This will save the results in the default location
-                elif hasattr(results, 'save'):
-                # Handle the case where results is a Results object
-                  results.save(save_dir=f"static/data/{prediction_id}")  # Save results to a specified directory
-                else:
-                  logger.error(f"Unexpected result type: {type(results)}")
-
-                # Save results to a directory for further processing
-                results.save(save_dir=f"static/data/{prediction_id}")
+                results = model.predict(local_img_path, save=True, save_dir=f"static/data/{prediction_id}")
 
                 # --- Path for Predictions ---
                 predicted_img_path = Path(f'static/data/{prediction_id}/{img_name}')
@@ -101,7 +92,7 @@ def consume():
                 logger.info(f'Uploaded predicted image to S3: {predicted_s3_key}')
 
                 # --- Parse YOLOv5 Results ---
-                pred_summary_path = Path(f'static/data/{prediction_id}/labels/{img_name.split(".")[0]}.txt')
+                pred_summary_path = Path(f'static/data/{prediction_id}/labels/{Path(img_name).stem}.txt')
 
                 labels = []
                 if pred_summary_path.exists():
@@ -129,7 +120,7 @@ def consume():
                 logger.info(f'Stored prediction in MongoDB: {prediction_id}')
 
                 # --- Notify Polybot ---
-                polybot_response = requests.post(f'{polybot_url}?predictionId={prediction_id}')
+                polybot_response = requests.post(polybot_url, json={"predictionId": prediction_id})
                 if polybot_response.status_code == 200:
                     logger.info(f'Polybot notified successfully for {prediction_id}')
                 else:
@@ -146,8 +137,7 @@ def consume():
 
         except Exception as e:
             logger.error(f'Error processing job: {e}')
-            # Optionally, add a delay before retrying
-            time.sleep(1)
+            time.sleep(1)  # Brief delay before retrying
 
 if __name__ == "__main__":
     consume()
