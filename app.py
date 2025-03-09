@@ -29,11 +29,16 @@ try:
     collection = db[collection_name]
 except Exception as e:
     logger.error(f"Failed to connect to MongoDB: {e}")
+    # Optionally, retry or exit with a specific status code
     exit(1)
 
 # --- Load Class Names ---
-with open("data/coco128.yaml", "r") as stream:
-    names = yaml.safe_load(stream)['names']
+try:
+    with open("data/coco128.yaml", "r") as stream:
+        names = yaml.safe_load(stream)['names']
+except Exception as e:
+    logger.error(f"Failed to load class names: {e}")
+    exit(1)
 
 def consume():
     """Polls SQS queue for messages and processes image jobs."""

@@ -1,5 +1,6 @@
 ultralytics
-pymongo
-loguru
 boto3
 requests
+pymongo
+loguru
+pyyaml

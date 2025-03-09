@@ -30,19 +30,22 @@ RUN mkdir -p data && \
 # Copy application files
 COPY . .
 
-# Define environment variables
-ENV S3_BUCKET_NAME=${S3_BUCKET_NAME}
-ENV SQS_QUEUE_URL=${SQS_QUEUE_URL}
-ENV MONGO_URI="mongodb://mongo1:27017,mongo2:27017,mongo3:27017"
-ENV MONGO_DB="default_db"
-ENV MONGO_COLLECTION="predictions"
-ENV POLYBOT_URL="http://polybot:5000/results"
+# Define environment variables (ideally set in Kubernetes config)
+# ENV S3_BUCKET_NAME=${S3_BUCKET_NAME}
+# ENV SQS_QUEUE_URL=${SQS_QUEUE_URL}
+# ENV MONGO_URI="mongodb://mongo1:27017,mongo2:27017,mongo3:27017"
+# ENV MONGO_DB="default_db"
+# ENV MONGO_COLLECTION="predictions"
+# ENV POLYBOT_URL="http://polybot:5000/results"
 
 # Install AWS CLI (if needed for any AWS operations)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    unzip \
-    curl \
-    && curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
-    && unzip awscliv2.zip \
-    && ./aws/install \
-    && rm -rf aws
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#     unzip \
+#     curl \
+#     && curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
+#     && unzip awscliv2.zip \
+#     && ./aws/install \
+#     && rm -rf aws
+
+# Run command when container starts
+CMD ["python", "app.py"]
