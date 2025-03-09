@@ -91,3 +91,51 @@ def consume():
                 # --- Parse YOLOv5 Results ---
                 pred_summary_path = Path(f'static/data/{prediction_id}/labels/{img_name.split(".")[0]}.txt')
 
+                labels = []
+                if pred_summary_path.exists():
+                    with open(pred_summary_path) as f:
+                        for line in f.read().splitlines():
+                            l = line.split(' ')
+                            labels.append({
+                                'class': names[int(l[0])],
+                                'cx': float(l[1]),
+                                'cy': float(l[2]),
+                                'width': float(l[3]),
+                                'height': float(l[4]),
+                            })
+
+                # --- Store Prediction in MongoDB ---
+                prediction_summary = {
+                    '_id': prediction_id,
+                    'chat_id': chat_id,
+                    'original_img_path': img_name,
+                    'predicted_img_path': predicted_s3_key,
+                    'labels': labels,
+                    'time': time.time()
+                }
+                collection.insert_one(prediction_summary)
+                logger.info(f'Stored prediction in MongoDB: {prediction_id}')
+
+                # --- Notify Polybot ---
+                polybot_response = requests.post(f'{polybot_url}?predictionId={prediction_id}')
+                if polybot_response.status_code == 200:
+                    logger.info(f'Polybot notified successfully for {prediction_id}')
+                else:
+                    logger.error(f'Failed to notify Polybot for {prediction_id}: {polybot_response.text}')
+
+                # --- Delete Message from SQS ---
+                sqs_client.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
+                logger.info(f'Job {prediction_id} completed and removed from SQS')
+
+            else:
+                # If no messages, wait and try again
+                logger.info("No messages in SQS queue. Waiting...")
+                time.sleep(10)  # Wait for 10 seconds before checking again
+
+        except Exception as e:
+            logger.error(f'Error processing job: {e}')
+            # Optionally, add a delay before retrying
+            time.sleep(1)
+
+if __name__ == "__main__":
+    consume()
