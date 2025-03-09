@@ -11,7 +11,7 @@ from loguru import logger
 from pymongo import MongoClient
 
 # --- Environment Variables ---
-images_bucket = os.environ['BUCKET_NAME']
+images_bucket = os.environ['S3_BUCKET_NAME']
 queue_url = os.environ['SQS_QUEUE_URL']
 mongo_uri = os.environ['MONGO_URI']
 db_name = os.environ.get('MONGO_DB', 'default_db')
