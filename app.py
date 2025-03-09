@@ -16,11 +16,11 @@ queue_url = os.environ['SQS_QUEUE_URL']
 mongo_uri = os.environ['MONGO_URI']
 db_name = os.environ.get('MONGO_DB', 'default_db')
 collection_name = os.environ.get('MONGO_COLLECTION', 'predictions')
-polybot_url = os.environ.get('POLYBOT_URL', 'http://polybot:5000/results')
+polybot_url = os.environ.get('POLYBOT_URL', 'http://polybot-service:30619/results')
 
 # --- AWS Clients ---
 sqs_client = boto3.client('sqs', region_name='eu-north-1')
-s3_client = boto3.client('s3')
+s3_client = boto3.client('s3', aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'], aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'])
 
 # --- MongoDB Client ---
 try:
@@ -122,8 +122,15 @@ def consume():
                 sqs_client.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
                 logger.info(f'Job {prediction_id} completed and removed from SQS')
 
+            else:
+                # If no messages, wait and try again
+                logger.info("No messages in SQS queue. Waiting...")
+                time.sleep(10)  # Wait for 10 seconds before checking again
+
         except Exception as e:
             logger.error(f'Error processing job: {e}')
+            # Optionally, add a delay before retrying
+            time.sleep(1)
 
 if __name__ == "__main__":
     consume()
