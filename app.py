@@ -66,9 +66,9 @@ def connect_to_mongo():
     max_retries = 5
     for attempt in range(1, max_retries + 1):
         try:
-            mongo_client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
-            db = mongo_client[db_name]
-            collection = db[collection_name]
+            mongo_client = MongoClient('mongodb://mongodb-0.mongodb.mongodb.svc.cluster.local:27017,mongodb-1.mongodb.mongodb.svc.cluster.local:27017,mongodb-2.mongodb.mongodb.svc.cluster.local:27017/?replicaSet=rs0')
+            db = mongo_client['config']
+            collection = db['image_collection']
             mongo_client.admin.command('ping')  # Verify connection
             logger.info("Connected to MongoDB successfully")
             return collection
