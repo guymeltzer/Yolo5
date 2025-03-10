@@ -11,6 +11,17 @@ from loguru import logger
 from pymongo import MongoClient, errors
 
 # --- AWS Secrets Manager Setup ---
+import os
+import boto3
+import json
+import time
+from pymongo import MongoClient, errors
+import logging
+
+# Configure logger
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
 def load_secrets():
     try:
         secrets_client = boto3.client('secretsmanager', region_name="eu-north-1")
@@ -25,14 +36,18 @@ def load_secrets():
 secrets = load_secrets()
 
 # --- Set Environment Variables from Secrets ---
+mongo_uri = secrets.get("MONGO_URI")
+if not mongo_uri:
+    logger.error("MONGO_URI is missing in the secrets.")
+    exit(1)
+
 os.environ["S3_BUCKET_NAME"] = secrets.get("S3_BUCKET_NAME", "")
 os.environ["SQS_QUEUE_URL"] = secrets.get("SQS_QUEUE_URL", "")
-os.environ["MONGO_URI"] = secrets.get("MONGO_URI", "")
+os.environ["MONGO_URI"] = mongo_uri
 
 # --- Environment Variables ---
 images_bucket = os.getenv('S3_BUCKET_NAME')
 queue_url = os.getenv('SQS_QUEUE_URL')
-mongo_uri = os.getenv('MONGO_URI')
 
 if not images_bucket or not queue_url or not mongo_uri:
     logger.error("Missing required environment variables. Exiting...")
@@ -59,11 +74,12 @@ def connect_to_mongo():
             return collection
         except errors.ConnectionFailure as e:
             logger.error(f"MongoDB connection attempt {attempt} failed: {e}")
-            time.sleep(5)  # Retry after delay
+            time.sleep(2 ** attempt)  # Exponential backoff for retries
     logger.error("MongoDB connection failed after retries. Exiting...")
     exit(1)
 
 collection = connect_to_mongo()
+
 
 # --- Load Class Names ---
 def load_class_names():
