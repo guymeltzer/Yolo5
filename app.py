@@ -38,7 +38,7 @@ if not images_bucket or not queue_url or not mongo_uri:
     logger.error("Missing required environment variables. Exiting...")
     exit(1)
 
-db_name = os.getenv('MONGO_DB', 'default_db')
+db_name = os.getenv('config')
 collection_name = os.getenv('MONGO_COLLECTION', 'predictions')
 polybot_url = os.getenv('POLYBOT_URL', 'http://polybot-service:30619/results')
 
