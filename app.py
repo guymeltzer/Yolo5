@@ -36,24 +36,30 @@ def load_secrets():
 
 secrets = load_secrets()
 
-# --- Set Environment Variables from Secrets ---
-mongo_uri = secrets.get("MONGO_URI", "")
-if not mongo_uri:
-    logger.error("MONGO_URI is missing in AWS Secrets Manager. Exiting...")
-    exit(1)
+# AWS Secrets Manager Config
+SECRET_NAME = "polybot-secrets"
+REGION_NAME = "eu-north-1"  # Change this if your AWS region is different
 
+def get_secret():
+    """Retrieve MongoDB URI from AWS Secrets Manager."""
+    try:
+        session = boto3.session.Session()
+        client = session.client(service_name="secretsmanager", region_name=REGION_NAME)
+
+        response = client.get_secret_value(SecretId=SECRET_NAME)
+        secret_data = json.loads(response["SecretString"])
+
+        return secret_data.get("MONGO_URI")  # Ensure your secret has this key
+    except Exception as e:
+        logger.error(f"Failed to retrieve secret: {e}")
+        exit(1)
 
 os.environ["S3_BUCKET_NAME"] = secrets.get("S3_BUCKET_NAME", "")
 os.environ["SQS_QUEUE_URL"] = secrets.get("SQS_QUEUE_URL", "")
-os.environ["MONGO_URI"] = mongo_uri
 
 # --- Environment Variables ---
 images_bucket = os.getenv('S3_BUCKET_NAME')
 queue_url = os.getenv('SQS_QUEUE_URL')
-
-if not images_bucket or not queue_url or not mongo_uri:
-    logger.error("Missing required environment variables. Exiting...")
-    exit(1)
 
 db_name = 'config'
 collection_name = 'image_collection'
@@ -66,10 +72,18 @@ s3_client = boto3.client('s3')
 # --- MongoDB Connection with Retry ---
 def connect_to_mongo():
     """Connect to MongoDB using URI from AWS Secrets Manager."""
+    mongo_uri = get_secret()
+
+    if not mongo_uri:
+        logger.error("MONGO_URI is missing from secrets. Exiting...")
+        exit(1)
+
+    logger.info(f"MONGO_URI: {mongo_uri}")  # Log MONGO_URI here
+
     max_retries = 5
     for attempt in range(1, max_retries + 1):
         try:
-            mongo_client = MongoClient(mongo_uri)  # Use loaded MONGO_URI
+            mongo_client = MongoClient(mongo_uri)
             db = mongo_client['config']
             collection = db['image_collection']
             mongo_client.admin.command('ping')  # Verify connection
