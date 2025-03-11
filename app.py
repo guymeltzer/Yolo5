@@ -21,7 +21,7 @@ import logging
 # Configure logger
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-logger.info(f"MONGO_URI: {mongo_uri}")
+
 
 def load_secrets():
     try:
