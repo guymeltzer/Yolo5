@@ -36,7 +36,7 @@ def load_secrets():
 secrets = load_secrets()
 
 # --- Set Environment Variables from Secrets ---
-mongo_uri = "mongodb://mongodb-0.mongodb:27017/?replicaset=rs0"
+mongo_uri = "mongodb://mongodb-0:27017/?replicaset=rs0"
 if not mongo_uri:
     logger.error("MONGO_URI is missing in the secrets.")
     exit(1)
@@ -66,7 +66,7 @@ def connect_to_mongo():
     max_retries = 5
     for attempt in range(1, max_retries + 1):
         try:
-            mongo_client = MongoClient('mongodb://mongodb-0.mongodb:27017/?replicaset=rs0')
+            mongo_client = MongoClient('mongodb://mongodb-0:27017/?replicaset=rs0')
             db = mongo_client['config']
             collection = db['image_collection']
             mongo_client.admin.command('ping')  # Verify connection
