@@ -53,7 +53,7 @@ s3_client = boto3.client('s3')
 # --- MongoDB Connection with Retry ---
 def connect_to_mongo():
     """Connect to MongoDB using URI from AWS Secrets Manager."""
-    mongo_uri = "mongodb://mongodb-0.mongodb.svc.cluster.local:27017,mongodb-1.mongodb.svc.cluster.local:27017,mongodb-2.mongodb.svc.cluster.local:27017/?replicaset=rs0"
+    mongo_uri = "mongodb://mongodb.mongodb.svc.cluster.local:27017/?replicaset=rs0"
   # Fetch directly from loaded secrets
 
     if not mongo_uri:
