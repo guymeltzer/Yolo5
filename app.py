@@ -18,12 +18,13 @@ import time
 from pymongo import MongoClient, errors
 import logging
 
-# Configure logger
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+# Configure logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
-
+# --- Load Secrets from AWS Secrets Manager ---
 def load_secrets():
+    """Retrieve all secrets from AWS Secrets Manager"""
     try:
         secrets_client = boto3.client('secretsmanager', region_name="eu-north-1")
         response = secrets_client.get_secret_value(SecretId="polybot-secrets")
@@ -32,37 +33,17 @@ def load_secrets():
         return secrets
     except Exception as e:
         logger.error(f"Failed to load secrets from AWS Secrets Manager: {e}")
-        exit(1)
+        raise  # Raising the exception instead of exiting
 
+# Load secrets once
 secrets = load_secrets()
 
-# AWS Secrets Manager Config
-SECRET_NAME = "polybot-secrets"
-REGION_NAME = "eu-north-1"  # Change this if your AWS region is different
-
-def get_secret():
-    """Retrieve MongoDB URI from AWS Secrets Manager."""
-    try:
-        session = boto3.session.Session()
-        client = session.client(service_name="secretsmanager", region_name=REGION_NAME)
-
-        response = client.get_secret_value(SecretId=SECRET_NAME)
-        secret_data = json.loads(response["SecretString"])
-
-        return secret_data.get("MONGO_URI")  # Ensure your secret has this key
-    except Exception as e:
-        logger.error(f"Failed to retrieve secret: {e}")
-        exit(1)
-
+# --- Environment Variables ---
 os.environ["S3_BUCKET_NAME"] = secrets.get("S3_BUCKET_NAME", "")
 os.environ["SQS_QUEUE_URL"] = secrets.get("SQS_QUEUE_URL", "")
 
-# --- Environment Variables ---
 images_bucket = os.getenv('S3_BUCKET_NAME')
 queue_url = os.getenv('SQS_QUEUE_URL')
-
-db_name = 'config'
-collection_name = 'image_collection'
 polybot_url = os.getenv('POLYBOT_URL', 'http://polybot-service:30619/results')
 
 # --- AWS Clients ---
@@ -72,13 +53,13 @@ s3_client = boto3.client('s3')
 # --- MongoDB Connection with Retry ---
 def connect_to_mongo():
     """Connect to MongoDB using URI from AWS Secrets Manager."""
-    mongo_uri = get_secret()
+    mongo_uri = secrets.get("MONGO_URI")  # Fetch directly from loaded secrets
 
     if not mongo_uri:
         logger.error("MONGO_URI is missing from secrets. Exiting...")
-        exit(1)
+        raise ValueError("MONGO_URI is missing from AWS Secrets Manager")
 
-    logger.info(f"MONGO_URI: {mongo_uri}")  # Log MONGO_URI here
+    logger.info(f"Using MONGO_URI: {mongo_uri}")
 
     max_retries = 5
     for attempt in range(1, max_retries + 1):
@@ -91,10 +72,10 @@ def connect_to_mongo():
             return collection
         except errors.ConnectionFailure as e:
             logger.error(f"MongoDB connection attempt {attempt} failed: {e}")
-            time.sleep(2 ** attempt)  # Exponential backoff for retries
+            time.sleep(2 ** attempt)  # Exponential backoff
 
     logger.error("MongoDB connection failed after retries. Exiting...")
-    exit(1)
+    raise ConnectionError("Could not connect to MongoDB after multiple retries")
 
 # Initialize MongoDB connection
 collection = connect_to_mongo()
