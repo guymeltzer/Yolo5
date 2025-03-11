@@ -54,7 +54,7 @@ if not images_bucket or not queue_url or not mongo_uri:
     exit(1)
 
 db_name = 'config'
-collection_name = os.getenv('MONGO_COLLECTION', 'predictions')
+collection_name = 'image_collection'
 polybot_url = os.getenv('POLYBOT_URL', 'http://polybot-service:30619/results')
 
 # --- AWS Clients ---
@@ -66,7 +66,7 @@ def connect_to_mongo():
     max_retries = 5
     for attempt in range(1, max_retries + 1):
         try:
-            mongo_client = MongoClient('mongodb://mongodb-0.mongodb.mongodb.svc.cluster.local:27017,mongodb-1.mongodb.mongodb.svc.cluster.local:27017,mongodb-2.mongodb.mongodb.svc.cluster.local:27017/?replicaSet=rs0')
+            mongo_client = MongoClient('mongodb://mongodb-0.mongodb:27017/?replicaset=rs0')
             db = mongo_client['config']
             collection = db['image_collection']
             mongo_client.admin.command('ping')  # Verify connection
