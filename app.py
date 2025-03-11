@@ -36,7 +36,7 @@ def load_secrets():
 secrets = load_secrets()
 
 # --- Set Environment Variables from Secrets ---
-mongo_uri = secrets.get("MONGO_URI")
+mongo_uri = "mongodb://mongodb-0.mongodb:27017/?replicaset=rs0"
 if not mongo_uri:
     logger.error("MONGO_URI is missing in the secrets.")
     exit(1)
