@@ -65,7 +65,7 @@ def connect_to_mongo():
     max_retries = 5
     for attempt in range(1, max_retries + 1):
         try:
-            mongo_client = MongoClient(mongo_uri)
+            mongo_client = MongoClient(mongo_uri, directConnection=True)
             db = mongo_client['config']
             collection = db['image_collection']
             mongo_client.admin.command('ping')  # Verify connection
