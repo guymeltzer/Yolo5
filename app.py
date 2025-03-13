@@ -9,21 +9,16 @@ import yaml
 from pathlib import Path
 from loguru import logger
 from pymongo import MongoClient, errors
+from pymongo.write_concern import WriteConcern
 
 # --- AWS Secrets Manager Setup ---
-import os
-import boto3
-import json
-import time
-from pymongo import MongoClient, errors
 import logging
 
-# Configure logging
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+# Configure logging with loguru (replacing standard logging for consistency)
+logger.remove()  # Remove default handler
+logger.add(sys.stderr, level="INFO")
 
 region_name = "eu-north-1"
-
 
 # --- Load Secrets from AWS Secrets Manager ---
 def load_secrets():
@@ -36,8 +31,7 @@ def load_secrets():
         return secrets
     except Exception as e:
         logger.error(f"Failed to load secrets from AWS Secrets Manager: {e}")
-        raise  # Raising the exception instead of exiting
-
+        raise
 
 # Load secrets once
 secrets = load_secrets()
@@ -45,6 +39,7 @@ secrets = load_secrets()
 # --- Environment Variables ---
 os.environ["S3_BUCKET_NAME"] = secrets.get("S3_BUCKET_NAME", "")
 os.environ["SQS_QUEUE_URL"] = secrets.get("SQS_QUEUE_URL", "")
+os.environ["TELEGRAM_APP_URL"] = secrets.get("TELEGRAM_APP_URL", "")
 
 images_bucket = os.getenv("S3_BUCKET_NAME")
 queue_url = os.getenv("SQS_QUEUE_URL")
@@ -64,43 +59,37 @@ s3_client = boto3.client(
     region_name=region_name,
 )
 
-
 # --- MongoDB Connection with Retry ---
 def connect_to_mongo():
     """Connect to MongoDB using URI from AWS Secrets Manager."""
     mongo_uri = "mongodb://mongodb.mongodb.svc.cluster.local:27017/?replicaset=rs0&readPreference=primary"
-    # Fetch directly from loaded secrets
-
     if not mongo_uri:
-        logger.error("MONGO_URI is missing from secrets. Exiting...")
+        logger.error("MONGO_URI is missing from secrets")
         raise ValueError("MONGO_URI is missing from AWS Secrets Manager")
-
-
 
     max_retries = 5
     for attempt in range(1, max_retries + 1):
         try:
             logger.info(f"Using MONGO_URI: {mongo_uri}")
-            mongo_client = MongoClient(mongo_uri, directConnection=True)
+            mongo_client = MongoClient(mongo_uri, retryWrites=True, retryReads=True)
             db = mongo_client["config"]
             collection = db["image_collection"]
             mongo_client.admin.command("ping")  # Verify connection
             logger.info("Connected to MongoDB successfully")
             return collection
-        except errors.ConnectionFailure as e:
+        except (errors.ConnectionFailure, errors.NotPrimaryError) as e:
             logger.error(f"MongoDB connection attempt {attempt} failed: {e}")
-            time.sleep(2**attempt)  # Exponential backoff
-
-    logger.error("MongoDB connection failed after retries. Exiting...")
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)  # Exponential backoff
+    logger.error("MongoDB connection failed after retries")
     raise ConnectionError("Could not connect to MongoDB after multiple retries")
-
 
 # Initialize MongoDB connection
 collection = connect_to_mongo()
 
-
 # --- Load Class Names ---
 def load_class_names():
+    """Load COCO class names from YAML file."""
     try:
         with open("data/coco128.yaml", "r") as stream:
             names = yaml.safe_load(stream)["names"]
@@ -108,13 +97,16 @@ def load_class_names():
         return names
     except Exception as e:
         logger.error(f"Failed to load class names: {e}")
-        exit(1)
-
+        raise
 
 names = load_class_names()
 
-model = ultralytics.YOLO("yolov5s.pt")  # Load YOLO model once
+# Load YOLO model (aligned with logs showing yolov5su.pt)
+model = ultralytics.YOLO("yolov5su.pt")
+
+# --- Process SQS Job ---
 def process_job(message, receipt_handle):
+    """Process an image detection job from SQS."""
     try:
         logger.info(f"Received SQS message: {message['Body']}")
         job = json.loads(message["Body"])
@@ -127,11 +119,9 @@ def process_job(message, receipt_handle):
             sqs_client.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
             return
 
-        logger.info(
-            f"Processing job: {prediction_id}, Image: {img_name}, Chat ID: {chat_id}"
-        )
+        logger.info(f"Processing job: {prediction_id}, Image: {img_name}, Chat ID: {chat_id}")
 
-        # --- Download Image from S3 ---
+        # Download Image from S3
         local_img_dir = Path(f"static/data/{prediction_id}")
         local_img_dir.mkdir(parents=True, exist_ok=True)
         local_img_path = local_img_dir / img_name
@@ -143,42 +133,36 @@ def process_job(message, receipt_handle):
             logger.error(f"Failed to download image from S3: {e}")
             return
 
-        # --- Run YOLOv5 Object Detection ---
-
+        # Run YOLOv5 Object Detection
         results = model.predict(
             str(local_img_path), save=True, save_dir=str(local_img_dir)
         )
 
-        # --- Upload Predictions to S3 ---
+        # Upload Predictions to S3
         predicted_s3_key = f"predictions/{prediction_id}/{img_name}"
-
         try:
-            # Upload predicted image to S3 (not re-downloading)
             s3_client.upload_file(str(local_img_path), images_bucket, predicted_s3_key)
             logger.info(f"Uploaded predicted image to S3: {predicted_s3_key}")
         except Exception as e:
             logger.error(f"Failed to upload predicted image to S3: {e}")
             return
 
-        # --- Parse YOLO Results ---
+        # Parse YOLO Results
         pred_summary_path = local_img_dir / f"labels/{Path(img_name).stem}.txt"
         labels = []
-
         if pred_summary_path.exists():
             with open(pred_summary_path) as f:
                 for line in f.read().splitlines():
                     l = line.split(" ")
-                    labels.append(
-                        {
-                            "class": names[int(l[0])],
-                            "cx": float(l[1]),
-                            "cy": float(l[2]),
-                            "width": float(l[3]),
-                            "height": float(l[4]),
-                        }
-                    )
+                    labels.append({
+                        "class": names[int(l[0])],
+                        "cx": float(l[1]),
+                        "cy": float(l[2]),
+                        "width": float(l[3]),
+                        "height": float(l[4]),
+                    })
 
-        # --- Store Prediction in MongoDB ---
+        # Store Prediction in MongoDB with retry
         prediction_summary = {
             "_id": prediction_id,
             "chat_id": chat_id,
@@ -187,31 +171,31 @@ def process_job(message, receipt_handle):
             "labels": labels,
             "time": time.time(),
         }
-        max_retries = 3
+        max_retries = 5
         for attempt in range(max_retries):
             try:
-                collection.insert_one(prediction_summary)
+                collection.with_options(write_concern=WriteConcern("majority")).insert_one(prediction_summary)
                 logger.info(f"Stored prediction in MongoDB: {prediction_id}")
                 break
-            except Exception as e:
-                logger.error(f"Failed to store prediction in MongoDB: {e}")
-                time.sleep(2 ** attempt)
+            except (errors.NotPrimaryError, errors.ServerSelectionTimeoutError) as e:
+                logger.error(f"Retry {attempt + 1}/{max_retries} failed: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
         else:
-            logger.error("Failed to store prediction after retries")
+            logger.error("Failed to store prediction in MongoDB after all retries")
 
-        # --- Notify Polybot ---
+        # Notify Polybot
         try:
             logger.info(f"Notifying Polybot at: {polybot_url}")
-            polybot_response = requests.post(
-                polybot_url, json={"predictionId": prediction_id}
-            )
+            polybot_response = requests.post(polybot_url, json={"predictionId": prediction_id}, timeout=10)
             if polybot_response.status_code == 200:
-              logger.info(f"Polybot URL is reachable: {polybot_url}")
-              logger.error(f"Polybot URL failed with status: {polybot_response.status_code}")
+                logger.info(f"Polybot notified successfully: {polybot_url}")
+            else:
+                logger.error(f"Polybot notification failed with status: {polybot_response.status_code}")
         except Exception as e:
-            logger.error(f"Error reaching Polybot URL: {e}")
+            logger.error(f"Error notifying Polybot: {e}")
 
-        # --- Delete Message from SQS ---
+        # Delete Message from SQS
         sqs_client.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
         logger.info(f"Job {prediction_id} completed and removed from SQS")
 
@@ -219,7 +203,7 @@ def process_job(message, receipt_handle):
         logger.error(f"Error processing job: {e}")
         time.sleep(1)
 
-
+# --- Main Consumer Loop ---
 def consume():
     """Polls SQS queue for messages and processes image jobs."""
     while True:
@@ -227,20 +211,18 @@ def consume():
             response = sqs_client.receive_message(
                 QueueUrl=queue_url, MaxNumberOfMessages=1, WaitTimeSeconds=5
             )
-
             if "Messages" not in response:
                 logger.info("No messages in SQS queue. Waiting...")
-                time.sleep(10)  # Wait before polling again
+                time.sleep(10)
                 continue
 
             message = response["Messages"][0]
             receipt_handle = message["ReceiptHandle"]
             process_job(message, receipt_handle)
-
         except Exception as e:
             logger.error(f"Error in main loop: {e}")
             time.sleep(1)
 
-
 # Start consumer
-consume()
+if __name__ == "__main__":
+    consume()
