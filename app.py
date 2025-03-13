@@ -11,6 +11,8 @@ from pathlib import Path
 from loguru import logger
 from pymongo import MongoClient, errors
 from pymongo.write_concern import WriteConcern
+import pymongo
+pymongo.common.VALIDATORS["replicaSet"] = lambda x: True  # Avoid strict validation issues
 
 # --- AWS Secrets Manager Setup ---
 import logging
@@ -44,7 +46,7 @@ os.environ["TELEGRAM_APP_URL"] = secrets.get("TELEGRAM_APP_URL", "")
 
 images_bucket = os.getenv("S3_BUCKET_NAME")
 queue_url = os.getenv("SQS_QUEUE_URL")
-polybot_url = os.getenv("TELEGRAM_APP_URL")
+polybot_url = os.getenv("POLYBOT_URL")
 
 # --- AWS Clients ---
 sqs_client = boto3.client(
@@ -62,26 +64,27 @@ s3_client = boto3.client(
 
 # --- MongoDB Connection with Retry ---
 def connect_to_mongo():
-    """Connect to MongoDB using URI from AWS Secrets Manager."""
-    mongo_uri = secrets.get("MONGO_URI")  # Use the secret directly
+    mongo_uri = secrets.get("MONGO_URI")
+    mongo_client = MongoClient(mongo_uri, retryWrites=True, retryReads=True, serverSelectionTimeoutMS=30000)
+    logger.info(f"Initial servers: {mongo_client.nodes}")
     if not mongo_uri:
         logger.error("MONGO_URI is missing from secrets")
         raise ValueError("MONGO_URI is missing from AWS Secrets Manager")
-
+    logger.info(f"Using MONGO_URI before connection: {mongo_uri}")
     max_retries = 5
     for attempt in range(1, max_retries + 1):
         try:
-            logger.info(f"Using MONGO_URI: {mongo_uri}")
+            logger.info(f"Attempt {attempt} with MONGO_URI: {mongo_uri}")
             mongo_client = MongoClient(mongo_uri, retryWrites=True, retryReads=True)
-            db = mongo_client[secrets.get("MONGO_DB", "config")]  # Use MONGO_DB from secret
+            db = mongo_client[secrets.get("MONGO_DB", "config")]
             collection = db[secrets.get("MONGO_COLLECTION", "image_collection")]
-            mongo_client.admin.command("ping")  # Verify connection
+            mongo_client.admin.command("ping")
             logger.info("Connected to MongoDB successfully")
             return collection
         except (errors.ConnectionFailure, errors.NotPrimaryError) as e:
             logger.error(f"MongoDB connection attempt {attempt} failed: {e}")
             if attempt < max_retries:
-                time.sleep(2 ** attempt)  # Exponential backoff
+                time.sleep(2 ** attempt)
     logger.error("MongoDB connection failed after retries")
     raise ConnectionError("Could not connect to MongoDB after multiple retries")
 
