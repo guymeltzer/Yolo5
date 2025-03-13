@@ -199,11 +199,11 @@ def process_job(message, receipt_handle):
                 polybot_url, json={"predictionId": prediction_id}
             )
             if polybot_response.status_code == 200:
-                logger.info(f"Polybot notified successfully for {prediction_id}")
+              logger.info(f"Polybot URL is reachable: {polybot_url}")
             else:
-                logger.error(f"Failed to notify Polybot: {polybot_response.text}")
+              logger.error(f"Polybot URL returned unexpected status: {polybot_response.status_code}")
         except Exception as e:
-            logger.error(f"Error notifying Polybot: {e}")
+            logger.error(f"Error reaching Polybot URL: {e}")
 
         # --- Delete Message from SQS ---
         sqs_client.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt_handle)
