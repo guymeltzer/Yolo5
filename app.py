@@ -151,11 +151,14 @@ def process_job(message, receipt_handle):
         predicted_s3_key = f"predictions/{prediction_id}/{img_name}"
 
         try:
-            s3_client.upload_file(str(local_img_path), images_bucket, predicted_s3_key)
-            logger.info(f"Uploaded predicted image to S3: {predicted_s3_key}")
-        except Exception as e:
-            logger.error(f"Failed to upload prediction to S3: {e}")
-            return
+            s3_client.download_file(images_bucket, img_name, str(local_img_path))
+            logger.info(f"Downloaded {img_name} from S3")
+        except boto3.exceptions.S3UploadFailedError as e:
+            if e.response['Error']['Code'] == '404':
+              logger.error(f"Image {img_name} not found in S3: {e}")
+            else:
+              logger.error(f"Failed to download image from S3: {e}")
+              return
 
         # --- Parse YOLO Results ---
         pred_summary_path = local_img_dir / f"labels/{Path(img_name).stem}.txt"
