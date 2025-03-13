@@ -141,7 +141,13 @@ def process_job(message, receipt_handle):
         results = model.predict(
             str(local_img_path), save=True, save_dir=str(local_img_dir)
         )
-
+        labels_dir = local_img_dir / "labels"
+        if labels_dir.exists() and labels_dir.is_dir():
+          logger.info(f"Labels directory exists: {labels_dir}")
+        else:
+          logger.error(f"Labels directory does not exist: {labels_dir}")
+          labels_dir.mkdir(parents=True, exist_ok=True)
+          logger.info(f"Created labels directory: {labels_dir}")
         # Upload Predictions to S3
         predicted_s3_key = f"predictions/{prediction_id}/{img_name}"
         try:
@@ -153,6 +159,10 @@ def process_job(message, receipt_handle):
 
         # Parse YOLO Results
         pred_summary_path = local_img_dir / f"labels/{Path(img_name).stem}.txt"
+        if pred_summary_path.exists():
+            logger.info(f"Prediction file contents: {pred_summary_path.read_text()}")
+        else:
+            logger.error(f"Prediction file not found: {pred_summary_path}")
         labels = []
         if pred_summary_path.exists():
             with open(pred_summary_path) as f:
@@ -179,6 +189,7 @@ def process_job(message, receipt_handle):
         for attempt in range(max_retries):
             try:
                 collection.with_options(write_concern=WriteConcern("majority")).insert_one(prediction_summary)
+                logger.info(f"Prediction summary stored: {prediction_summary}")
                 logger.info(f"Stored prediction in MongoDB: {prediction_id}")
                 break
             except (errors.NotPrimaryError, errors.ServerSelectionTimeoutError) as e:
