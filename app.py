@@ -48,7 +48,7 @@ os.environ["SQS_QUEUE_URL"] = secrets.get("SQS_QUEUE_URL", "")
 
 images_bucket = os.getenv("S3_BUCKET_NAME")
 queue_url = os.getenv("SQS_QUEUE_URL")
-polybot_url = os.getenv("POLYBOT_URL", "http://polybot-service:30619/results")
+polybot_url = os.getenv("POLYBOT_URL")
 
 # --- AWS Clients ---
 sqs_client = boto3.client(
