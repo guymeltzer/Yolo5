@@ -63,7 +63,7 @@ s3_client = boto3.client(
 # --- MongoDB Connection with Retry ---
 def connect_to_mongo():
     """Connect to MongoDB using URI from AWS Secrets Manager."""
-    mongo_uri = os.getenv("MONGO_URI")
+    mongo_uri = secrets.get("MONGO_URI")  # Use the secret directly
     if not mongo_uri:
         logger.error("MONGO_URI is missing from secrets")
         raise ValueError("MONGO_URI is missing from AWS Secrets Manager")
@@ -73,8 +73,8 @@ def connect_to_mongo():
         try:
             logger.info(f"Using MONGO_URI: {mongo_uri}")
             mongo_client = MongoClient(mongo_uri, retryWrites=True, retryReads=True)
-            db = mongo_client["config"]
-            collection = db["image_collection"]
+            db = mongo_client[secrets.get("MONGO_DB", "config")]  # Use MONGO_DB from secret
+            collection = db[secrets.get("MONGO_COLLECTION", "image_collection")]
             mongo_client.admin.command("ping")  # Verify connection
             logger.info("Connected to MongoDB successfully")
             return collection
