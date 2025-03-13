@@ -187,21 +187,13 @@ def process_job(message, receipt_handle):
             "labels": labels,
             "time": time.time(),
         }
-        max_retries = 5
-        for attempt in range(1, max_retries + 1):
-            try:
-                collection.insert_one(prediction_summary)
-                logger.info(f"Stored prediction in MongoDB: {prediction_id}")
-                break
-            except errors.NotWritablePrimary as e:
-                logger.error(f"Attempt {attempt}: Failed to store prediction in MongoDB: {e}")
-                if attempt < max_retries:
-                    time.sleep(2**attempt)  # Exponential backoff
-                else:
-                    logger.error("Exceeded maximum retries. Could not store prediction in MongoDB.")
-            except Exception as e:
-                    logger.error(f"Failed to store prediction in MongoDB: {e}")
-                    break
+
+        try:
+            collection.insert_one(prediction_summary)
+            logger.info(f"Stored prediction in MongoDB: {prediction_id}")
+        except Exception as e:
+            logger.error(f"Failed to store prediction in MongoDB: {e}")
+
         # --- Notify Polybot ---
         try:
             polybot_response = requests.post(
