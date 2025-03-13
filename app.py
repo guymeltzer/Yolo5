@@ -141,10 +141,10 @@ def process_job(message, receipt_handle):
         results = model.predict(
             str(local_img_path),
             save=True,
-            save_txt=True,  # Explicitly save label files
-            project="static/data",  # Base directory
-            name=prediction_id,  # Subdirectory per prediction
-            exist_ok=True  # Avoid overwriting issues
+            save_txt=True,
+            project="static/data",
+            name=prediction_id,
+            exist_ok=True
         )
         labels_dir = local_img_dir / "labels"
         if labels_dir.exists() and labels_dir.is_dir():
@@ -166,21 +166,23 @@ def process_job(message, receipt_handle):
         pred_summary_path = Path(f"static/data/{prediction_id}/labels/{Path(img_name).stem}.txt")
         labels = []
         if pred_summary_path.exists():
-            with open(pred_summary_path) as f:
-                logger.info(f"Prediction file contents: {f.read()}")
-                for line in f.read().splitlines():
-                    l = line.split(" ")
-                    labels.append({
-                        "class": names[int(l[0])],
-                        "cx": float(l[1]),
-                        "cy": float(l[2]),
-                        "width": float(l[3]),
-                        "height": float(l[4]),
-                    })
-        else:
-            logger.error(f"Prediction file still not found: {pred_summary_path}")
+            with open(pred_summary_path, 'r') as f:
+                lines = f.read().splitlines()
+                logger.info(f"Prediction file contents: {lines}")
+                for line in lines:
+                    if line.strip():  # Skip empty lines
+                        l = line.split(" ")
+                        labels.append({
+                            "class": names[int(l[0])],
+                            "cx": float(l[1]),
+                            "cy": float(l[2]),
+                            "width": float(l[3]),
+                            "height": float(l[4]),
+                        })
+                    else:
+                        logger.error(f"Prediction file not found: {pred_summary_path}")
 
-        # Store Prediction in MongoDB with retry
+        # Store Prediction in MongoDB
         prediction_summary = {
             "_id": prediction_id,
             "chat_id": chat_id,
