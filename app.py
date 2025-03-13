@@ -6,6 +6,7 @@ import boto3
 import requests
 import uuid
 import yaml
+import sys
 from pathlib import Path
 from loguru import logger
 from pymongo import MongoClient, errors
