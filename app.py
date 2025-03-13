@@ -75,11 +75,12 @@ def connect_to_mongo():
         logger.error("MONGO_URI is missing from secrets. Exiting...")
         raise ValueError("MONGO_URI is missing from AWS Secrets Manager")
 
-    logger.info(f"Using MONGO_URI: {mongo_uri}")
+
 
     max_retries = 5
     for attempt in range(1, max_retries + 1):
         try:
+            logger.info(f"Using MONGO_URI: {mongo_uri}")
             mongo_client = MongoClient(mongo_uri, directConnection=True)
             db = mongo_client["config"]
             collection = db["image_collection"]
