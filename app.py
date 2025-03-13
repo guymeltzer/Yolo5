@@ -113,7 +113,7 @@ def load_class_names():
 
 names = load_class_names()
 
-
+model = ultralytics.YOLO("yolov5s.pt")  # Load YOLO model once
 def process_job(message, receipt_handle):
     try:
         logger.info(f"Received SQS message: {message['Body']}")
@@ -144,7 +144,7 @@ def process_job(message, receipt_handle):
             return
 
         # --- Run YOLOv5 Object Detection ---
-        model = ultralytics.YOLO("yolov5s.pt")  # Load YOLO model once
+
         results = model.predict(
             str(local_img_path), save=True, save_dir=str(local_img_dir)
         )
@@ -187,22 +187,27 @@ def process_job(message, receipt_handle):
             "labels": labels,
             "time": time.time(),
         }
-
-        try:
-            collection.insert_one(prediction_summary)
-            logger.info(f"Stored prediction in MongoDB: {prediction_id}")
-        except Exception as e:
-            logger.error(f"Failed to store prediction in MongoDB: {e}")
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                collection.insert_one(prediction_summary)
+                logger.info(f"Stored prediction in MongoDB: {prediction_id}")
+                break
+            except Exception as e:
+                logger.error(f"Failed to store prediction in MongoDB: {e}")
+                time.sleep(2 ** attempt)
+        else:
+            logger.error("Failed to store prediction after retries")
 
         # --- Notify Polybot ---
         try:
+            logger.info(f"Notifying Polybot at: {polybot_url}")
             polybot_response = requests.post(
                 polybot_url, json={"predictionId": prediction_id}
             )
             if polybot_response.status_code == 200:
               logger.info(f"Polybot URL is reachable: {polybot_url}")
-            else:
-              logger.error(f"Polybot URL returned unexpected status: {polybot_response.status_code}")
+              logger.error(f"Polybot URL failed with status: {polybot_response.status_code}")
         except Exception as e:
             logger.error(f"Error reaching Polybot URL: {e}")
 
