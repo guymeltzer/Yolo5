@@ -139,7 +139,12 @@ def process_job(message, receipt_handle):
 
         # Run YOLOv5 Object Detection
         results = model.predict(
-            str(local_img_path), save=True, save_dir=str(local_img_dir)
+            str(local_img_path),
+            save=True,
+            save_txt=True,  # Explicitly save label files
+            project="static/data",  # Base directory
+            name=prediction_id,  # Subdirectory per prediction
+            exist_ok=True  # Avoid overwriting issues
         )
         labels_dir = local_img_dir / "labels"
         if labels_dir.exists() and labels_dir.is_dir():
@@ -158,14 +163,11 @@ def process_job(message, receipt_handle):
             return
 
         # Parse YOLO Results
-        pred_summary_path = local_img_dir / f"labels/{Path(img_name).stem}.txt"
-        if pred_summary_path.exists():
-            logger.info(f"Prediction file contents: {pred_summary_path.read_text()}")
-        else:
-            logger.error(f"Prediction file not found: {pred_summary_path}")
+        pred_summary_path = Path(f"static/data/{prediction_id}/labels/{Path(img_name).stem}.txt")
         labels = []
         if pred_summary_path.exists():
             with open(pred_summary_path) as f:
+                logger.info(f"Prediction file contents: {f.read()}")
                 for line in f.read().splitlines():
                     l = line.split(" ")
                     labels.append({
@@ -175,6 +177,8 @@ def process_job(message, receipt_handle):
                         "width": float(l[3]),
                         "height": float(l[4]),
                     })
+        else:
+            logger.error(f"Prediction file still not found: {pred_summary_path}")
 
         # Store Prediction in MongoDB with retry
         prediction_summary = {
