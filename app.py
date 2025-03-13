@@ -115,8 +115,9 @@ names = load_class_names()
 
 def process_job(message, receipt_handle):
     try:
+        logger.info(f"Received SQS message: {message['Body']}")
         job = json.loads(message["Body"])
-        img_name = job.get("img_name")
+        img_name = job.get("imgName")
         chat_id = job.get("chat_id")
         prediction_id = str(uuid.uuid4())
 
