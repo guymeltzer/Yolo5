@@ -191,6 +191,7 @@ def process_job(message, receipt_handle):
         # Notify Polybot
         try:
             logger.info(f"Notifying Polybot at: {polybot_url}")
+            logger.info(f"Polybot URL: {polybot_url}")
             polybot_response = requests.post(polybot_url, json={"predictionId": prediction_id}, timeout=10)
             if polybot_response.status_code == 200:
                 logger.info(f"Polybot notified successfully: {polybot_url}")
