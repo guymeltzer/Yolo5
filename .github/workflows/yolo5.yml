@@ -1,15 +1,18 @@
-# .github/workflows/yolo5.yml
 name: Build and Push Yolo5
+
 on:
   push:
     branches: [main]
     paths:
       - 'yolo5/**'
+  workflow_dispatch:
+
 jobs:
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Yolo5 Repo
+        uses: actions/checkout@v3
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v2
@@ -20,29 +23,53 @@ jobs:
       - name: Get Latest Tag from Docker Hub
         id: get-latest-tag
         run: |
-          # Fetch the latest tag from Docker Hub for guymeltzer/yolo5
-          LATEST_TAG=$(c`url` -s "https://hub.docker.com/v2/repositories/guymeltzer/yolo5/tags/?page_size=25" | \
+          LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/guymeltzer/yolo5/tags/?page_size=25" | \
             jq -r '.results[] | .name' | \
             grep -E '^1\.0\.[0-9]+$' | \
             sort -V | \
             tail -n 1)
           if [ -z "$LATEST_TAG" ]; then
-            echo "No valid tag found, starting with 1.0.98"
-            LATEST_TAG="1.0.98"
+            echo "No valid tag found, starting with 1.0.101"  # Adjust if needed
+            LATEST_TAG="1.0.101"
           fi
-          # Extract the patch version and increment it
-          PATCH_VERSION=$(echo $LATEST_TAG | cut -d'.' -f3)
+          PATCH_VERSION=$(echo "$LATEST_TAG" | cut -d'.' -f3)
           NEW_PATCH=$((PATCH_VERSION + 1))
           NEW_TAG="1.0.$NEW_PATCH"
-          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_OUTPUT
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          echo "Latest tag: $LATEST_TAG, New tag: $NEW_TAG"
+          echo "NEW_TAG=$NEW_TAG" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
 
       - name: Build and Push Docker Image
+        uses: docker/build-push-action@v4
+        with:
+          context: yolo5/
+          push: true
+          tags: |
+            guymeltzer/yolo5:${{ steps.get-latest-tag.outputs.NEW_TAG }}
+            guymeltzer/yolo5:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Checkout Manifests Repo
+        uses: actions/checkout@v3
+        with:
+          repository: <your-username>/manifests  # Replace with your manifests repo
+          token: ${{ secrets.GITHUB_TOKEN }}    # Use PAT if separate repo
+          path: manifests
+
+      - name: Update Deployment with New Tag
         run: |
-          docker build -t guymeltzer/yolo5:${{ steps.get-latest-tag.outputs.NEW_TAG }} yolo5/
-          docker push guymeltzer/yolo5:${{ steps.get-latest-tag.outputs.NEW_TAG }}
-          # Optionally tag as 'latest' as well
-          docker tag guymeltzer/yolo5:${{ steps.get-latest-tag.outputs.NEW_TAG }} guymeltzer/yolo5:latest
-          docker push guymeltzer/yolo5:latest
+          sed -i "s|guymeltzer/yolo5:.*|guymeltzer/yolo5:${{ steps.get-latest-tag.outputs.NEW_TAG }}|" manifests/yolo5-deployment.yaml
+          cat manifests/yolo5-deployment.yaml
+
+      - name: Commit and Push Manifest Changes
+        run: |
+          cd manifests
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add yolo5-deployment.yaml
+          git commit -m "Update yolo5 to ${{ steps.get-latest-tag.outputs.NEW_TAG }}"
+          git push
