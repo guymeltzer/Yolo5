@@ -269,6 +269,6 @@ def consume():
             logger.error(f"Error in main loop: {e}")
             time.sleep(1)
 
-# Start consumer
+## Start consumer
 if __name__ == "__main__":
     consume()
