@@ -136,7 +136,7 @@ def process_job(message, receipt_handle):
     try:
         logger.info(f"Received SQS message: {message['Body']}")
         job = json.loads(message["Body"])
-        img_name = job.get("imgName")
+        img_name = job.get("imgName")  # This will now be image_<number>.jpg
         chat_id = job.get("chat_id")
         prediction_id = str(uuid.uuid4())
 
@@ -193,7 +193,7 @@ def process_job(message, receipt_handle):
                 lines = f.read().splitlines()
                 logger.info(f"Prediction file contents: {lines}")
                 for line in lines:
-                    if line.strip():  # Skip empty lines
+                    if line.strip():
                         l = line.split(" ")
                         labels.append({
                             "class": names[int(l[0])],
@@ -209,7 +209,7 @@ def process_job(message, receipt_handle):
         prediction_summary = {
             "_id": prediction_id,
             "chat_id": chat_id,
-            "original_img_path": img_name,
+            "original_img_path": img_name,  # Use the sequential name from SQS
             "predicted_img_path": predicted_s3_key,
             "labels": labels,
             "time": time.time(),
