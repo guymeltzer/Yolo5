@@ -97,7 +97,7 @@ jobs:
 
       - name: Update Deployment with New Tag
         run: |
-          DEPLOYMENT_PATH="manifests/k8s/Yolo5/deployment.yaml"  # Adjust path to match your structure
+          DEPLOYMENT_PATH="k8s/Yolo5/deployment.yaml"  # Adjust path to match your structure
           echo "Updating $DEPLOYMENT_PATH with new tag: ${{ steps.get-latest-tag.outputs.NEW_TAG }}"
           sed -i "s|guymeltzer/yolo5:.*|guymeltzer/yolo5:${{ steps.get-latest-tag.outputs.NEW_TAG }}|" "$DEPLOYMENT_PATH"
           cat "$DEPLOYMENT_PATH"
