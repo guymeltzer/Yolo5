@@ -21,7 +21,7 @@ jobs:
         id: get-latest-tag
         run: |
           # Fetch the latest tag from Docker Hub for guymeltzer/yolo5
-          LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/guymeltzer/yolo5/tags/?page_size=25" | \
+          LATEST_TAG=$(c`url` -s "https://hub.docker.com/v2/repositories/guymeltzer/yolo5/tags/?page_size=25" | \
             jq -r '.results[] | .name' | \
             grep -E '^1\.0\.[0-9]+$' | \
             sort -V | \
