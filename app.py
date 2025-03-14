@@ -230,7 +230,7 @@ def process_job(message, receipt_handle):
 
         # Notify Polybot
         try:
-            # TODO: Replace verify=False with a certificate path for production, e.g., verify="/path/to/cert.pem"
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
             logger.info(f"Notifying Polybot at: {polybot_url}")
             logger.info(f"Polybot URL: {polybot_url}")
             polybot_response = requests.post(polybot_url, json={"predictionId": prediction_id}, timeout=10, verify=False)
