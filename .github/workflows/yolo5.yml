@@ -104,11 +104,13 @@ jobs:
 
       - name: Verify File Structure
         run: |
+          echo "Listing files in manifests directory:"
           find manifests -type f -name "*.yaml" | sort
+          DEPLOYMENT_PATH="manifests/k8s/Yolo5/deployment.yaml"
           if [ -f "$DEPLOYMENT_PATH" ]; then
             echo "Target file exists"
           else
-            echo "TARGET FILE NOT FOUND!"
+            echo "TARGET FILE NOT FOUND at $DEPLOYMENT_PATH!"
             exit 1
           fi
 
