@@ -11,6 +11,7 @@ from pathlib import Path
 from loguru import logger
 from pymongo import MongoClient, errors
 from pymongo.write_concern import WriteConcern
+import urllib3
 import pymongo
 pymongo.common.VALIDATORS["replicaSet"] = lambda x: True  # Avoid strict validation issues
 
@@ -207,6 +208,7 @@ def process_job(message, receipt_handle):
 
         # Notify Polybot
         try:
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
             logger.info(f"Notifying Polybot at: {polybot_url}")
             logger.info(f"Polybot URL: {polybot_url}")
             polybot_response = requests.post(polybot_url, json={"predictionId": prediction_id}, timeout=10, verify=False)
