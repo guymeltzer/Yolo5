@@ -159,7 +159,7 @@ def process_job(message, receipt_handle):
             logger.error(f"Failed to download image from S3: {e}")
             return
 
-        # Run YOLOv5 Object Detection
+        ## Run YOLOv5 Object Detection
         results = model.predict(
             str(local_img_path),
             save=True,
