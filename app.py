@@ -13,12 +13,10 @@ from pymongo import MongoClient, errors
 from pymongo.write_concern import WriteConcern
 import urllib3
 import pymongo
+
 pymongo.common.VALIDATORS["replicaSet"] = lambda x: True  # Avoid strict validation issues
 
 # --- AWS Secrets Manager Setup ---
-import logging
-
-# Configure logging with loguru (replacing standard logging for consistency)
 logger.remove()  # Remove default handler
 logger.add(sys.stderr, level="INFO")
 
@@ -106,8 +104,31 @@ def load_class_names():
 
 names = load_class_names()
 
-# Load YOLO model (aligned with logs showing yolov5su.pt)
-model = ultralytics.YOLO("yolov5su.pt")
+# --- Load YOLO Model with Download Check ---
+model_path = "yolov5su.pt"
+model_url = "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov5su.pt"
+
+def download_model(url, filepath):
+    """Download the YOLO model if it doesn't exist."""
+    if not os.path.exists(filepath):
+        logger.info(f"Downloading model from {url} to {filepath}")
+        response = requests.get(url, stream=True)
+        total_size = int(response.headers.get("content-length", 0))
+        with open(filepath, "wb") as f:
+            for chunk in response.iter_content(chunk_size=1024):
+                if chunk:
+                    f.write(chunk)
+                    downloaded = min(total_size, f.tell())
+                    logger.debug(f"Downloaded {downloaded / 1024 / 1024:.2f} MB / {total_size / 1024 / 1024:.2f} MB")
+        logger.info(f"Model downloaded successfully to {filepath}")
+    else:
+        logger.info(f"Model already exists at {filepath}, skipping download.")
+
+# Download model if not present
+download_model(model_url, model_path)
+
+# Load YOLO model
+model = ultralytics.YOLO(model_path)
 
 # --- Process SQS Job ---
 def process_job(message, receipt_handle):
@@ -149,11 +170,12 @@ def process_job(message, receipt_handle):
         )
         labels_dir = local_img_dir / "labels"
         if labels_dir.exists() and labels_dir.is_dir():
-          logger.info(f"Labels directory exists: {labels_dir}")
+            logger.info(f"Labels directory exists: {labels_dir}")
         else:
-          logger.error(f"Labels directory does not exist: {labels_dir}")
-          labels_dir.mkdir(parents=True, exist_ok=True)
-          logger.info(f"Created labels directory: {labels_dir}")
+            logger.error(f"Labels directory does not exist: {labels_dir}")
+            labels_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Created labels directory: {labels_dir}")
+
         # Upload Predictions to S3
         predicted_s3_key = f"predictions/{prediction_id}/{img_name}"
         try:
@@ -180,8 +202,8 @@ def process_job(message, receipt_handle):
                             "width": float(l[3]),
                             "height": float(l[4]),
                         })
-                    else:
-                        logger.error(f"Prediction file not found: {pred_summary_path}")
+        else:
+            logger.error(f"Prediction file not found: {pred_summary_path}")
 
         # Store Prediction in MongoDB
         prediction_summary = {
@@ -208,7 +230,7 @@ def process_job(message, receipt_handle):
 
         # Notify Polybot
         try:
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            # TODO: Replace verify=False with a certificate path for production, e.g., verify="/path/to/cert.pem"
             logger.info(f"Notifying Polybot at: {polybot_url}")
             logger.info(f"Polybot URL: {polybot_url}")
             polybot_response = requests.post(polybot_url, json={"predictionId": prediction_id}, timeout=10, verify=False)
