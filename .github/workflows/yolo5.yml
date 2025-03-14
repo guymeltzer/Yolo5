@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'yolo5/**'
+      - '.github/workflows/yolo5.yml'
   workflow_dispatch:
 
 jobs:
@@ -23,21 +24,54 @@ jobs:
       - name: Get Latest Tag from Docker Hub
         id: get-latest-tag
         run: |
-          LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/guymeltzer/yolo5/tags/?page_size=25" | \
-            jq -r '.results[] | .name' | \
-            grep -E '^1\.0\.[0-9]+$' | \
-            sort -V | \
-            tail -n 1)
+          echo "Checking for existing tags on guymeltzer/yolo5..."
+          RESPONSE=$(curl -s "https://hub.docker.com/v2/repositories/guymeltzer/yolo5/tags/?page_size=100&ordering=last_updated")
+          if [ -z "$RESPONSE" ]; then
+            echo "Error: No response from Docker Hub API"
+            exit 1
+          fi
+          echo "Full API response:"
+          echo "$RESPONSE"
+          
+          # Check if response has results
+          HAS_RESULTS=$(echo "$RESPONSE" | jq -r '.results | length')
+          if [ "$HAS_RESULTS" -gt 0 ]; then
+            echo "Valid results found, parsing tags..."
+            ALL_TAGS=$(echo "$RESPONSE" | jq -r '.results[].name')
+            if [ $? -ne 0 ]; then
+              echo "Error: Failed to parse tags with jq"
+              exit 1
+            fi
+            echo "All available tags:"
+            echo "$ALL_TAGS"
+          
+            VERSION_TAGS=$(echo "$ALL_TAGS" | grep -E '^1\.0\.[0-9]+$')
+            echo "Filtered version tags:"
+            echo "$VERSION_TAGS"
+          
+            if [ -z "$VERSION_TAGS" ]; then
+              echo "No version tags (1.0.x) found"
+              LATEST_TAG=""
+            else
+              LATEST_TAG=$(echo "$VERSION_TAGS" | sort -V | tail -n 1)
+              echo "Determined latest tag: $LATEST_TAG"
+            fi
+          else
+            echo "No valid results found in API response."
+            LATEST_TAG=""
+          fi
+          
+          # Fallback if no valid tag found
           if [ -z "$LATEST_TAG" ]; then
-            echo "No valid tag found, starting with 1.0.101"  # Adjust if needed
+            echo "Falling back to default tag 1.0.101"
             LATEST_TAG="1.0.101"
           fi
+          
           PATCH_VERSION=$(echo "$LATEST_TAG" | cut -d'.' -f3)
           NEW_PATCH=$((PATCH_VERSION + 1))
           NEW_TAG="1.0.$NEW_PATCH"
           echo "Latest tag: $LATEST_TAG, New tag: $NEW_TAG"
           echo "NEW_TAG=$NEW_TAG" >> "$GITHUB_OUTPUT"
-        shell: bash
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -56,20 +90,26 @@ jobs:
       - name: Checkout Manifests Repo
         uses: actions/checkout@v3
         with:
-          repository: <your-username>/manifests  # Replace with your manifests repo
-          token: ${{ secrets.GITHUB_TOKEN }}    # Use PAT if separate repo
+          repository: guymeltzer/Yolo5Infra  # Assuming a separate infra repo, adjust as needed
+          token: ${{ secrets.MANIFEST_TOKEN }}  # Create this PAT with write permissions
           path: manifests
 
       - name: Update Deployment with New Tag
         run: |
-          sed -i "s|guymeltzer/yolo5:.*|guymeltzer/yolo5:${{ steps.get-latest-tag.outputs.NEW_TAG }}|" manifests/yolo5-deployment.yaml
-          cat manifests/yolo5-deployment.yaml
+          DEPLOYMENT_PATH="manifests/k8s/Yolo5/deployment.yaml"  # Adjust path to match your structure
+          echo "Updating $DEPLOYMENT_PATH with new tag: ${{ steps.get-latest-tag.outputs.NEW_TAG }}"
+          sed -i "s|guymeltzer/yolo5:.*|guymeltzer/yolo5:${{ steps.get-latest-tag.outputs.NEW_TAG }}|" "$DEPLOYMENT_PATH"
+          cat "$DEPLOYMENT_PATH"
 
       - name: Commit and Push Manifest Changes
         run: |
           cd manifests
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add yolo5-deployment.yaml
-          git commit -m "Update yolo5 to ${{ steps.get-latest-tag.outputs.NEW_TAG }}"
-          git push
+          git add k8s/Yolo5/deployment.yaml
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update yolo5 to ${{ steps.get-latest-tag.outputs.NEW_TAG }}"
+            git push
+          fi
