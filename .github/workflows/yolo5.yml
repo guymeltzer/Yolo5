@@ -4,8 +4,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'yolo5/**'
-      - '.github/workflows/yolo5.yml'
+      - '**/*.py'  # Broader trigger that catches Python file changes
+      - '**/*.yml'  # Catches workflow file changes
+      - 'Dockerfile'  # Catches Dockerfile changes
   workflow_dispatch:
 
 jobs:
@@ -90,7 +91,7 @@ jobs:
       - name: Checkout Manifests Repo
         uses: actions/checkout@v3
         with:
-          repository: guymeltzer/Yolo5Infra  # Assuming a separate infra repo, adjust as needed
+          repository: guymeltzer/PolybotInfra  # Assuming a separate infra repo, adjust as needed
           token: ${{ secrets.MANIFEST_TOKEN }}  # Create this PAT with write permissions
           path: manifests
 
@@ -100,6 +101,16 @@ jobs:
           echo "Updating $DEPLOYMENT_PATH with new tag: ${{ steps.get-latest-tag.outputs.NEW_TAG }}"
           sed -i "s|guymeltzer/yolo5:.*|guymeltzer/yolo5:${{ steps.get-latest-tag.outputs.NEW_TAG }}|" "$DEPLOYMENT_PATH"
           cat "$DEPLOYMENT_PATH"
+
+      - name: Verify File Structure
+        run: |
+          find manifests -type f -name "*.yaml" | sort
+          if [ -f "$DEPLOYMENT_PATH" ]; then
+            echo "Target file exists"
+          else
+            echo "TARGET FILE NOT FOUND!"
+            exit 1
+          fi
 
       - name: Commit and Push Manifest Changes
         run: |
