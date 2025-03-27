@@ -42,6 +42,7 @@ secrets = load_secrets()
 os.environ["S3_BUCKET_NAME"] = secrets.get("S3_BUCKET_NAME", "")
 os.environ["SQS_QUEUE_URL"] = secrets.get("SQS_QUEUE_URL", "")
 os.environ["TELEGRAM_APP_URL"] = secrets.get("TELEGRAM_APP_URL", "")
+os.environ["POLYBOT_URL"] = secrets.get("POLYBOT_URL", "")
 
 images_bucket = os.getenv("S3_BUCKET_NAME")
 queue_url = os.getenv("SQS_QUEUE_URL")
